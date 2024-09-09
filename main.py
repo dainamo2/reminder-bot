@@ -8,18 +8,17 @@ import redis
 from datetime import datetime, timedelta
 from flask import Flask, request, abort
 import threading
+import os
 
 app = Flask(__name__)
+
+# Redisの接続設定
+REDIS_URL = os.getenv('REDIS_URL', 'redis://default:nm1Ok7WLMwEPxlWNhE5Al3EGJ1aMSLRo@redis-14909.c278.us-east-1-4.ec2.redns.redis-cloud.com:14909/0')
+redis_client = redis.StrictRedis.from_url(REDIS_URL)
 
 # LINE Developersの設定ページで取得したチャネルシークレットをここに入力
 CHANNEL_SECRET = 'a1ddfdc8d553c13d65130d51f58d537e'
 LINE_CHANNEL_ACCESS_TOKEN = '8yPjgjTkeLBr3lqtcH1SRhICbGF/6V8dKeZlkzya5laBxzFqeRKDMcf587srPG3Nojf0byKyVMPMT7GtZsIKZznh3UWap+nl9uGkzs3iewqMV6m4MHC971XvvO047bf2xHzvwJRgOZz5z1/ah7nLVwdB04t89/1O/w1cDnyilFU='
-
-# Redisに接続
-redis_host = "redis-14909.c278.us-east-1-4.ec2.reds.redis-cloud.com"
-redis_port = 14909
-redis_password = "nm1Ok7VLMwEPxlWNhE5Al3EGJ1aMSL"
-redis_client = redis.StrictRedis(host=redis_host, port=redis_port, password=redis_password, decode_responses=True)
 
 # 署名検証関数
 def verify_signature(request):
@@ -55,13 +54,13 @@ def send_message(to, text):
 # メッセージ送信を指定時刻に行う関数
 def schedule_message(to, text, scheduled_time):
     time_diff = (scheduled_time - datetime.now()).total_seconds()
-    
+
     if time_diff > 0:
         print(f"Message scheduled in {time_diff} seconds.")
         redis_client.set(f"reminder:{to}:{text}", text, ex=int(time_diff))
         threading.Timer(time_diff, send_message, args=[to, f"{text}だよ〜"]).start()
     else:
-        print("指定された時刻は過去です。")
+        send_message(to, "過去の時刻は指定できません。")
 
 # 日時フォーマットのメッセージを処理する
 def handle_reminder_message(user_id, text):
@@ -75,6 +74,8 @@ def handle_reminder_message(user_id, text):
             time_str, message = text.split("\n", 1)
             now = datetime.now()
             scheduled_time = datetime(now.year, now.month, now.day, int(time_str[:2]), int(time_str[2:]))
+            
+            # 過去の時刻の場合エラーメッセージを送信
             if scheduled_time < now:
                 send_message(user_id, "過去の時刻は指定できません。")
                 return

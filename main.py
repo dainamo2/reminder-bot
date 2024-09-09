@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import base64
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, request, abort
 import threading
 
@@ -60,9 +60,23 @@ def schedule_message(to, text, scheduled_time):
 # 日時フォーマットのメッセージを処理する
 def handle_reminder_message(user_id, text):
     try:
-        # 「202409011944\nテスト」の形式で送信されることを想定
+        # メッセージを分割 (例: "1535\nゆうしくんと飲み会")
         datetime_str, message = text.split("\n", 1)
-        scheduled_time = datetime.strptime(datetime_str, "%Y%m%d%H%M")
+        now = datetime.now()
+
+        # 時間のみ (HHMM) か、日付と時間 (MMDDHHMM) か、完全な日時 (YYYYMMDDHHMM) かを判定
+        if len(datetime_str) == 4:  # HHMMのみ指定
+            scheduled_time = now.replace(hour=int(datetime_str[:2]), minute=int(datetime_str[2:]), second=0, microsecond=0)
+            if scheduled_time < now:
+                # 時刻が現在より過去の場合、エラーメッセージを送信
+                send_message(user_id, "指定された時間は過ぎています。未来の時間を入力してください。")
+                return
+        elif len(datetime_str) == 8:  # MMDDHHMMのみ指定
+            scheduled_time = datetime(now.year, int(datetime_str[:2]), int(datetime_str[2:4]), int(datetime_str[4:6]), int(datetime_str[6:]))
+        elif len(datetime_str) == 12:  # YYYYMMDDHHMMが指定された場合
+            scheduled_time = datetime.strptime(datetime_str, "%Y%m%d%H%M")
+        else:
+            raise ValueError("Invalid datetime format")
 
         # メッセージを指定された日時に送信
         schedule_message(user_id, f"{message}だよ〜", scheduled_time)
@@ -71,7 +85,7 @@ def handle_reminder_message(user_id, text):
         send_message(user_id, f"リマインダーを {scheduled_time.strftime('%Y-%m-%d %H:%M')} に設定したよ！")
     except ValueError:
         # フォーマットが違う場合のエラーメッセージ
-        send_message(user_id, "リマインダーのフォーマットが正しくありません。'YYYYMMDDHHMM\\nメッセージ'の形式で送信してください。")
+        send_message(user_id, "リマインダーのフォーマットが正しくありません。'YYYYMMDDHHMM\\nメッセージ'または'HHMM\\nメッセージ'の形式で送信してください。")
 
 @app.route("/webhook", methods=['POST'])
 def webhook():
@@ -88,7 +102,7 @@ def webhook():
             print(f"Message from {user_id}: {text}")
 
             # 日時フォーマットかどうかを判別し、リマインダー処理
-            if len(text) >= 12 and text[:12].isdigit() and '\n' in text:
+            if len(text.split("\n")[0]) in [4, 8, 12] and '\n' in text:
                 handle_reminder_message(user_id, text)
             else:
                 send_message(user_id, f"正しく入力してね。\nサンプル:\n202402031930\nAちゃんと飲み会")

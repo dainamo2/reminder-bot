@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import base64
 import time
+import redis
 from datetime import datetime, timedelta
 from flask import Flask, request, abort
 import threading
@@ -13,6 +14,12 @@ app = Flask(__name__)
 # LINE Developersの設定ページで取得したチャネルシークレットをここに入力
 CHANNEL_SECRET = 'a1ddfdc8d553c13d65130d51f58d537e'
 LINE_CHANNEL_ACCESS_TOKEN = '8yPjgjTkeLBr3lqtcH1SRhICbGF/6V8dKeZlkzya5laBxzFqeRKDMcf587srPG3Nojf0byKyVMPMT7GtZsIKZznh3UWap+nl9uGkzs3iewqMV6m4MHC971XvvO047bf2xHzvwJRgOZz5z1/ah7nLVwdB04t89/1O/w1cDnyilFU='
+
+# Redisに接続
+redis_host = "redis-14909.c278.us-east-1-4.ec2.reds.redis-cloud.com"
+redis_port = 14909
+redis_password = "nm1Ok7VLMwEPxlWNhE5Al3EGJ1aMSL"
+redis_client = redis.StrictRedis(host=redis_host, port=redis_port, password=redis_password, decode_responses=True)
 
 # 署名検証関数
 def verify_signature(request):
@@ -47,45 +54,39 @@ def send_message(to, text):
 
 # メッセージ送信を指定時刻に行う関数
 def schedule_message(to, text, scheduled_time):
-    current_time = datetime.now()
-    time_diff = (scheduled_time - current_time).total_seconds()
-
+    time_diff = (scheduled_time - datetime.now()).total_seconds()
+    
     if time_diff > 0:
         print(f"Message scheduled in {time_diff} seconds.")
-        # スレッドを使って遅延実行
-        threading.Timer(time_diff, send_message, args=[to, text]).start()
+        redis_client.set(f"reminder:{to}:{text}", text, ex=int(time_diff))
+        threading.Timer(time_diff, send_message, args=[to, f"{text}だよ〜"]).start()
     else:
         print("指定された時刻は過去です。")
 
 # 日時フォーマットのメッセージを処理する
 def handle_reminder_message(user_id, text):
     try:
-        # メッセージを分割 (例: "1535\nゆうしくんと飲み会")
-        datetime_str, message = text.split("\n", 1)
-        now = datetime.now()
-
-        # 時間のみ (HHMM) か、日付と時間 (MMDDHHMM) か、完全な日時 (YYYYMMDDHHMM) かを判定
-        if len(datetime_str) == 4:  # HHMMのみ指定
-            scheduled_time = now.replace(hour=int(datetime_str[:2]), minute=int(datetime_str[2:]), second=0, microsecond=0)
-            if scheduled_time < now:
-                # 時刻が現在より過去の場合、エラーメッセージを送信
-                send_message(user_id, "指定された時間は過ぎています。未来の時間を入力してください。")
-                return
-        elif len(datetime_str) == 8:  # MMDDHHMMのみ指定
-            scheduled_time = datetime(now.year, int(datetime_str[:2]), int(datetime_str[2:4]), int(datetime_str[4:6]), int(datetime_str[6:]))
-        elif len(datetime_str) == 12:  # YYYYMMDDHHMMが指定された場合
+        # 日付を含むフォーマットの場合
+        if len(text) >= 12 and text[:12].isdigit():
+            datetime_str, message = text.split("\n", 1)
             scheduled_time = datetime.strptime(datetime_str, "%Y%m%d%H%M")
-        else:
-            raise ValueError("Invalid datetime format")
+        # 時間だけを指定した場合
+        elif len(text) >= 4 and text[:4].isdigit():
+            time_str, message = text.split("\n", 1)
+            now = datetime.now()
+            scheduled_time = datetime(now.year, now.month, now.day, int(time_str[:2]), int(time_str[2:]))
+            if scheduled_time < now:
+                send_message(user_id, "過去の時刻は指定できません。")
+                return
 
         # メッセージを指定された日時に送信
-        schedule_message(user_id, f"{message}だよ〜", scheduled_time)
+        schedule_message(user_id, message, scheduled_time)
 
         # ユーザーにリマインダー設定が成功したことを知らせる
         send_message(user_id, f"リマインダーを {scheduled_time.strftime('%Y-%m-%d %H:%M')} に設定したよ！")
     except ValueError:
         # フォーマットが違う場合のエラーメッセージ
-        send_message(user_id, "リマインダーのフォーマットが正しくありません。'YYYYMMDDHHMM\\nメッセージ'または'HHMM\\nメッセージ'の形式で送信してください。")
+        send_message(user_id, "リマインダーのフォーマットが正しくありません。'YYYYMMDDHHMM\\nメッセージ' または 'HHMM\\nメッセージ' の形式で送信してください。")
 
 @app.route("/webhook", methods=['POST'])
 def webhook():
@@ -102,7 +103,7 @@ def webhook():
             print(f"Message from {user_id}: {text}")
 
             # 日時フォーマットかどうかを判別し、リマインダー処理
-            if len(text.split("\n")[0]) in [4, 8, 12] and '\n' in text:
+            if len(text) >= 4 and '\n' in text:
                 handle_reminder_message(user_id, text)
             else:
                 send_message(user_id, f"正しく入力してね。\nサンプル:\n202402031930\nAちゃんと飲み会")

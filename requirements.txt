@@ -84,5 +84,6 @@ virtualenv==20.25.1
 websockets==12.0
 xattr==1.1.0
 zipp==3.20.0
-Flask==2.0.2
+Flask==2.0.3
 gunicorn==20.1.0
+Werkzeug==2.0.3

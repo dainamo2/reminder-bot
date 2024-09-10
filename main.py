@@ -71,11 +71,13 @@ def handle_reminder_message(user_id, text):
         if len(text) >= 12 and text[:12].isdigit():
             datetime_str, message = text.split("\n", 1)
             scheduled_time = datetime.strptime(datetime_str, "%Y%m%d%H%M")
+            print(f"YYYYMMDDHHMM形式で設定: {scheduled_time}")
 
         # 月日を含むフォーマットの場合 (MMDDHHMM)
         elif len(text) >= 8 and text[:8].isdigit():
             datetime_str, message = text.split("\n", 1)
             scheduled_time = datetime(now.year, int(datetime_str[:2]), int(datetime_str[2:4]), int(datetime_str[4:6]), int(datetime_str[6:8]))
+            print(f"MMDDHHMM形式で設定: {scheduled_time}")
 
         # 時間だけを指定した場合 (HHMM)
         elif len(text) >= 4 and text[:4].isdigit():
@@ -83,6 +85,7 @@ def handle_reminder_message(user_id, text):
             
             # リマインダーの時刻を設定
             scheduled_time = datetime(now.year, now.month, now.day, int(time_str[:2]), int(time_str[2:4]))
+            print(f"HHMM形式で設定: {scheduled_time}")
 
         else:
             send_message(user_id, "リマインダーのフォーマットが正しくありません。'YYYYMMDDHHMM\\nメッセージ' または 'HHMM\\nメッセージ' の形式で送信してください。")
@@ -91,6 +94,7 @@ def handle_reminder_message(user_id, text):
         # 過去の時間か確認
         if scheduled_time < now:
             send_message(user_id, "過去の時刻は指定できません。")
+            print(f"過去の時刻が指定されました: {scheduled_time}")
             return  # ここで処理を終了します。
 
         # メッセージを指定された日時に送信
@@ -98,9 +102,11 @@ def handle_reminder_message(user_id, text):
 
         # ユーザーにリマインダー設定が成功したことを知らせる
         send_message(user_id, f"リマインダーを {scheduled_time.strftime('%Y-%m-%d %H:%M')} に設定したよ！")
-    except ValueError:
-        # フォーマットが違う場合のエラーメッセージ
+        print(f"リマインダー設定: {scheduled_time}")
+    except Exception as e:
+        # フォーマットが違う場合のエラーメッセージとエラーログ出力
         send_message(user_id, "リマインダーのフォーマットが正しくありません。'YYYYMMDDHHMM\\nメッセージ' または 'HHMM\\nメッセージ' の形式で送信してください。")
+        print(f"エラーが発生しました: {e}")
 
 @app.route("/webhook", methods=['POST'])
 def webhook():

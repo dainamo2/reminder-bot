@@ -65,24 +65,33 @@ def schedule_message(to, text, scheduled_time):
 # 日時フォーマットのメッセージを処理する
 def handle_reminder_message(user_id, text):
     try:
-        # 日付を含むフォーマットの場合
+        now = datetime.now()
+
+        # 日付を含むフォーマットの場合 (YYYYMMDDHHMM)
         if len(text) >= 12 and text[:12].isdigit():
             datetime_str, message = text.split("\n", 1)
             scheduled_time = datetime.strptime(datetime_str, "%Y%m%d%H%M")
-        # 時間だけを指定した場合
+
+        # 月日を含むフォーマットの場合 (MMDDHHMM)
+        elif len(text) >= 8 and text[:8].isdigit():
+            datetime_str, message = text.split("\n", 1)
+            scheduled_time = datetime(now.year, int(datetime_str[:2]), int(datetime_str[2:4]), int(datetime_str[4:6]), int(datetime_str[6:8]))
+
+        # 時間だけを指定した場合 (HHMM)
         elif len(text) >= 4 and text[:4].isdigit():
             time_str, message = text.split("\n", 1)
-            now = datetime.now()
-            scheduled_time = datetime(now.year, now.month, now.day, int(time_str[:2]), int(time_str[2:]))
-            if scheduled_time < now:
-                send_message(user_id, "過去の時刻は指定できません。")
-                return  # ここでリマインダー設定処理をスキップします。
+            scheduled_time = datetime(now.year, now.month, now.day, int(time_str[:2]), int(time_str[2:4]))
 
-        # 未来の時刻の場合のみリマインダーを設定する
-        if scheduled_time >= now:
-            schedule_message(user_id, message, scheduled_time)
-            send_message(user_id, f"リマインダーを {scheduled_time.strftime('%Y-%m-%d %H:%M')} に設定したよ！")
+        # 過去の時間か確認
+        if scheduled_time < now:
+            send_message(user_id, "過去の時刻は指定できません。")
+            return
 
+        # メッセージを指定された日時に送信
+        schedule_message(user_id, message, scheduled_time)
+
+        # ユーザーにリマインダー設定が成功したことを知らせる
+        send_message(user_id, f"リマインダーを {scheduled_time.strftime('%Y-%m-%d %H:%M')} に設定したよ！")
     except ValueError:
         # フォーマットが違う場合のエラーメッセージ
         send_message(user_id, "リマインダーのフォーマットが正しくありません。'YYYYMMDDHHMM\\nメッセージ' または 'HHMM\\nメッセージ' の形式で送信してください。")

@@ -67,8 +67,6 @@ def handle_reminder_message(user_id, text):
     try:
         now = datetime.now()
 
-        print(f"Received text: {text}")  # 受け取ったテキストをログに出力
-
         # 日付を含むフォーマットの場合 (YYYYMMDDHHMM)
         if len(text) >= 12 and text[:12].isdigit():
             datetime_str, message = text.split("\n", 1)
@@ -83,25 +81,19 @@ def handle_reminder_message(user_id, text):
 
         # 時間だけを指定した場合 (HHMM)
         elif len(text) >= 4 and text[:4].isdigit():
-            if '\n' in text:
+            # 改行で分割するが、メッセージが存在しない場合はエラーを返す
+            if "\n" in text:
                 time_str, message = text.split("\n", 1)
-
-                print(f"HHMM形式での解析: {time_str}, {message}")  # ここでテキストが正しく分割されているか確認
-
-                if len(time_str) == 4 and time_str.isdigit():
-                    # リマインダーの時刻を設定
-                    scheduled_time = datetime(now.year, now.month, now.day, int(time_str[:2]), int(time_str[2:4]))
-                    print(f"HHMM形式で設定: {scheduled_time}")
-                else:
-                    send_message(user_id, "リマインダーのフォーマットが正しくありません。'HHMM\\nメッセージ' の形式で送信してください。")
-                    return
+                
+                # リマインダーの時刻を設定
+                scheduled_time = datetime(now.year, now.month, now.day, int(time_str[:2]), int(time_str[2:4]))
+                print(f"HHMM形式で設定: {scheduled_time}")
             else:
                 send_message(user_id, "リマインダーのフォーマットが正しくありません。'HHMM\\nメッセージ' の形式で送信してください。")
                 return
 
         else:
             send_message(user_id, "リマインダーのフォーマットが正しくありません。'YYYYMMDDHHMM\\nメッセージ' または 'HHMM\\nメッセージ' の形式で送信してください。")
-            print("不正なフォーマットが検出されました")
             return
 
         # 過去の時間か確認
@@ -116,9 +108,8 @@ def handle_reminder_message(user_id, text):
         # ユーザーにリマインダー設定が成功したことを知らせる
         send_message(user_id, f"リマインダーを {scheduled_time.strftime('%Y-%m-%d %H:%M')} に設定したよ！")
         print(f"リマインダー設定: {scheduled_time}")
-
     except Exception as e:
-        # エラー内容を詳細にログに出力
+        # フォーマットが違う場合のエラーメッセージとエラーログ出力
         send_message(user_id, "リマインダーのフォーマットが正しくありません。'YYYYMMDDHHMM\\nメッセージ' または 'HHMM\\nメッセージ' の形式で送信してください。")
         print(f"エラーが発生しました: {e}")
 
